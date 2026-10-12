@@ -1,0 +1,21 @@
+{
+  "sheet_path": "~/path/to/your/README.md",
+  "photo_path": "photo.jpg",
+  "seed": 42,
+  "resolution": "auto",
+  "weights": {
+    "easy": 1,
+    "medium": 2,
+    "hard": 4
+  },
+  "colors": {
+    "easy": "#3FA35B",
+    "medium": "#E3B23C",
+    "hard": "#D9473F"
+  },
+  "revision_opacity": 0.5,
+  "labels": true,
+  "legend": true,
+  "mode": "overlay",
+  "overlay_level_offset": -1
+}

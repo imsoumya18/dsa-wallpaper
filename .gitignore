@@ -1,0 +1,16 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Generated at runtime (rendered images, compiled overlay, logs, screen info)
+out/
+
+# Personal settings and photo
+config.json
+photo.*
+
+# macOS / editors
+.DS_Store
+.vscode/
+.idea/
