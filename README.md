@@ -19,7 +19,7 @@ Every problem on your sheet is a tile:
 - **Works over video wallpapers** (e.g. WallSpace). Solved tiles are holes the video plays through.
 - **Scattered, fixed layout:** tiles are randomly mixed (not grouped by topic) and never move, so the picture fills in like a scratch card.
 - **Fits your screen exactly:** it measures your display's resolution, Retina scale and menu bar.
-- **Progress pill** under the notch: `349/455 · Done 187 · Revision 162 · Open 106`.
+- **Progress pill** under the notch: `Total 349/455  🟢 127/131  🟡 149/188  🔴 73/136` (solved / total, overall and per difficulty).
 - **Starts at login** and stays out of the way: no Dock icon, and clicks pass straight through.
 
 ## Requirements

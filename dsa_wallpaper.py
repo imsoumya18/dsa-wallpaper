@@ -144,21 +144,56 @@ def scatter_layout(items: list[Problem], weights: dict, seed: int, w: int, h: in
 
 # ───────────────────────────── rendering ─────────────────────────────
 
-FONT_CANDIDATES = [
-    ("/System/Library/Fonts/Supplemental/Arial Bold.ttf", 0),
+SF_PRO = "/System/Library/Fonts/SFNS.ttf"   # SF Pro, the macOS system font
+FALLBACK_FONTS = [
     ("/System/Library/Fonts/HelveticaNeue.ttc", 1),
-    ("/Library/Fonts/Arial Bold.ttf", 0),
+    ("/System/Library/Fonts/Supplemental/Arial Bold.ttf", 0),
     ("/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf", 0),
     ("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 0),
 ]
+EMOJI_FONT = "/System/Library/Fonts/Apple Color Emoji.ttc"
 
 
 @lru_cache(maxsize=None)
-def font(size: int) -> ImageFont.FreeTypeFont:
-    for path, idx in FONT_CANDIDATES:
+def font(size: int, weight: str = "Semibold") -> ImageFont.FreeTypeFont:
+    """SF Pro at the given weight (it's a variable font); falls back to
+    other bold sans fonts when SF Pro isn't available."""
+    if Path(SF_PRO).exists():
+        try:
+            f = ImageFont.truetype(SF_PRO, size)
+            names = [n.decode() if isinstance(n, bytes) else n for n in f.get_variation_names()]
+            for w in (weight, "Semibold", "Bold"):
+                if w in names:
+                    f.set_variation_by_name(w)
+                    break
+            return f
+        except Exception:
+            pass
+    for path, idx in FALLBACK_FONTS:
         if Path(path).exists():
             return ImageFont.truetype(path, size, index=idx)
     return ImageFont.load_default(size)
+
+
+@lru_cache(maxsize=None)
+def emoji(char: str, px: int) -> Image.Image | None:
+    """A color emoji as an RGBA image px tall. Apple Color Emoji only has fixed
+    bitmap sizes, so draw at one of those and scale down."""
+    if not Path(EMOJI_FONT).exists():
+        return None
+    for size in (160, 96, 64, 48):
+        try:
+            f = ImageFont.truetype(EMOJI_FONT, size)
+            im = Image.new("RGBA", (size * 2, size * 2), (0, 0, 0, 0))
+            ImageDraw.Draw(im).text((size // 2, size // 2), char, font=f, embedded_color=True)
+            box = im.getbbox()
+            if not box:
+                continue
+            im = im.crop(box)
+            return im.resize((round(im.width * px / im.height), px), Image.LANCZOS)
+        except Exception:
+            continue
+    return None
 
 
 def hex_rgb(h: str) -> tuple[int, int, int]:
@@ -336,11 +371,15 @@ def render(cfg: dict, scr: Screen, transparent: bool = False) -> tuple[Image.Ima
 
     # tiles fill the usable area: below the menu bar, above a pinned Dock
     area_w, area_h = w - scr.left - scr.right, h - scr.top - scr.bottom
-    stats = {"open": 0, "revision": 0, "clear": 0}
+    stats = {"open": 0, "revision": 0, "clear": 0,
+             "by_diff": {d: [0, 0] for d in ("easy", "medium", "hard")}}  # [solved, total]
     for p, (x0, y0, x1, y1) in scatter_layout(problems, cfg["weights"], cfg["seed"], area_w, area_h):
         x0, x1, y0, y1 = x0 + scr.left, x1 + scr.left, y0 + scr.top, y1 + scr.top
         st = p.state
         stats[st] += 1
+        stats["by_diff"][p.diff][1] += 1
+        if st != "open":
+            stats["by_diff"][p.diff][0] += 1
         if st == "clear":
             continue
         a = 255 if st == "open" else rev_a
@@ -366,32 +405,59 @@ def render(cfg: dict, scr: Screen, transparent: bool = False) -> tuple[Image.Ima
     return img, stats
 
 
+DIFF_EMOJI = {"easy": "🟢", "medium": "🟡", "hard": "🔴"}
+
+
 def draw_legend(img: Image.Image, stats: dict, scr: Screen, cfg: dict):
+    """Total 349/455   🟢 127/131   🟡 149/188   🔴 73/136"""
     scale = scr.scale
-    total = sum(stats.values())
-    items = [("Done", stats["clear"]), ("Revision", stats["revision"]), ("Open", stats["open"])]
-    f, fb = font(int(12 * scale)), font(int(15 * scale))
-    pad, gap = int(10 * scale), int(14 * scale)
-    pct = f"{stats['clear'] + stats['revision']}/{total}"
-    parts = [(pct, fb)] + [(f"{k} {v}", f) for k, v in items]
-    width = sum(fn.getlength(t) for t, fn in parts) + gap * (len(parts) - 1) + 2 * pad
+    solved = stats["clear"] + stats["revision"]
+    total = stats["clear"] + stats["revision"] + stats["open"]
+    f_lbl = font(int(13 * scale), "Medium")
+    f_num = font(int(14 * scale), "Bold")
+    pad, gap, dot_gap = int(14 * scale), int(16 * scale), int(5 * scale)
+    dot = int(12 * scale)
     height = int(30 * scale)
-    if cfg.get("legend_position") == "bottom-right":
+
+    # segments: (kind, payload, font)
+    segs = [("text", "Total", f_lbl), ("space", int(6 * scale), None), ("text", f"{solved}/{total}", f_num)]
+    for d in ("easy", "medium", "hard"):
+        s_, t_ = stats["by_diff"][d]
+        segs += [("space", gap, None), ("dot", d, None), ("space", dot_gap, None),
+                 ("text", f"{s_}/{t_}", f_num)]
+
+    def seg_w(kind, val, fn):
+        if kind == "text":
+            return fn.getlength(val)
+        if kind == "space":
+            return val
+        return dot
+
+    width = sum(seg_w(*sg) for sg in segs) + 2 * pad
+    notch = cfg.get("legend_position") != "bottom-right"
+    if notch:  # centered, hanging from the bottom of the menu bar / notch
+        x0, y0 = (scr.w - width) / 2, scr.top
+    else:
         x0 = scr.w - scr.right - width - int(16 * scale)
         y0 = scr.h - scr.bottom - height - int(16 * scale)
-    else:  # "notch": centered, hanging from the bottom of the menu bar / notch
-        x0 = (scr.w - width) / 2
-        y0 = scr.top
+
     layer = Image.new("RGBA", img.size, (0, 0, 0, 0))
     d = ImageDraw.Draw(layer)
-    notch = cfg.get("legend_position") != "bottom-right"
     d.rounded_rectangle((x0, y0, x0 + width, y0 + height), radius=int(10 * scale),
                         fill=(0, 0, 0, 235) if notch else (14, 16, 20, 225),
                         corners=(not notch, not notch, True, True))
-    x = x0 + pad
-    for t, fn in parts:
-        d.text((x, y0 + height / 2), t, font=fn, fill=(240, 240, 240, 255), anchor="lm")
-        x += fn.getlength(t) + gap
+    x, cy = x0 + pad, y0 + height / 2
+    for kind, val, fn in segs:
+        if kind == "text":
+            col = (170, 170, 175, 255) if fn is f_lbl else (245, 245, 247, 255)
+            d.text((x, cy), val, font=fn, fill=col, anchor="lm")
+        elif kind == "dot":
+            em = emoji(DIFF_EMOJI[val], dot)
+            if em is not None:
+                layer.alpha_composite(em, (round(x), round(cy - em.height / 2)))
+            else:
+                d.ellipse((x, cy - dot / 2, x + dot, cy + dot / 2), fill=(*hex_rgb(cfg["colors"][val]), 255))
+        x += seg_w(kind, val, fn)
     img.alpha_composite(layer)
 
 
