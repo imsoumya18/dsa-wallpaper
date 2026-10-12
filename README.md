@@ -42,14 +42,14 @@ The first run creates `config.json`. Set `sheet_path` in it to your sheet, then 
 
 ## Your sheet
 
-Any markdown file whose table rows look like this:
+Any markdown file with tables like this:
 
-```markdown
 | # | Problem | Difficulty | ✅ Solved | 📌 Revision |
 |:---:|:--------|:----------:|:---------:|:-----------:|
 | `3.2.5` | Print subarray with maximum subarray sum | 🟡 | ✅ | |
+| `5.2.6` | Longest Palindromic Substring | 🔴 | ✅ | ✅ |
 | `15.5.5` | Kruskal's Algorithm | 🔴 | | |
-```
+| `1.3.2` | Java Collections | 🟢 | ❌ | |
 
 - **Id:** the first column, in backticks. A problem can appear in several rows (for example a "new" week and a "revision" week); its marks are combined.
 - **Difficulty:** 🟢 easy, 🟡 medium, 🔴 hard.
