@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-dsa-wallpaper — turn a markdown DSA problem sheet into a Finviz-style heatmap
+dsa-wallpaper — turn a markdown DSA problem sheet into a heatmap
 that covers your desktop wallpaper. Solve a problem and its tile disappears,
 revealing the photo underneath.
 

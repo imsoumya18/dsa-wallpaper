@@ -5,7 +5,7 @@ Every problem you solve knocks out a tile and reveals the wallpaper behind it.**
 
 ![demo](docs/demo.gif)
 
-Every problem on your sheet is a tile, laid out like a [Finviz](https://finviz.com/map.ashx) stock map:
+Every problem on your sheet is a tile:
 
 | Tile | Meaning |
 |---|---|
