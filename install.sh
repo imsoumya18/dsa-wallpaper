@@ -31,13 +31,18 @@ echo "→ Setting up Python environment"
 cfg() { "$PY" - "$1" <<'PY'
 import sys, dsa_wallpaper as m
 c = m.load_config(); k = sys.argv[1]
-print(m.resolve(c[k]) if k == "sheet_path" else c[k])
+v = c[k]
+print(m.resolve(v) if k == "sheet_path" and not m.is_url(v) else v)
 PY
 }
 SHEET="$(cfg sheet_path)"
 MODE="$(cfg mode)"
 LEVEL="$(cfg overlay_level_offset)"
-[ -f "$SHEET" ] || { echo "Sheet not found: $SHEET"; exit 1; }
+POLL_MIN="$(cfg poll_minutes)"
+case "$SHEET" in
+  http://*|https://*) REMOTE=1 ;;
+  *) REMOTE=0; [ -f "$SHEET" ] || { echo "Sheet not found: $SHEET"; exit 1; } ;;
+esac
 
 xml() { sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g' <<<"$1"; }
 mkdir -p "$AGENTS" out
@@ -97,10 +102,11 @@ cat > "$PLIST" <<EOF
   <key>WorkingDirectory</key><string>$(xml "$DIR")</string>
   <key>WatchPaths</key>
   <array>
-    <string>$(xml "$SHEET")</string>
+$( [ "$REMOTE" = 0 ] && echo "    <string>$(xml "$SHEET")</string>" )
     <string>$(xml "$DIR/config.json")</string>
     <string>$(xml "$DIR/out/screen.json")</string>
   </array>
+$( [ "$REMOTE" = 1 ] && echo "  <key>StartInterval</key><integer>$(( POLL_MIN * 60 ))</integer>" )
   <key>RunAtLoad</key><true/>
   <key>ThrottleInterval</key><integer>3</integer>
   <key>StandardOutPath</key><string>$(xml "$DIR/out/log.txt")</string>
@@ -112,5 +118,9 @@ EOF
 echo "→ Registering background agent"
 launchctl bootstrap "$GUI" "$PLIST"
 
-echo "✓ Done ($MODE mode). It refreshes every time you save:"
+if [ "$REMOTE" = 1 ]; then
+  echo "✓ Done ($MODE mode). It checks for updates every $POLL_MIN min:"
+else
+  echo "✓ Done ($MODE mode). It refreshes every time you save:"
+fi
 echo "  $SHEET"

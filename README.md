@@ -15,7 +15,7 @@ Every problem on your sheet is a tile:
 | ▫️ **50% transparent** | Solved, but marked 📌 for revision |
 | *(gone)* | Solved, or marked ❌ to skip |
 
-- **Live:** save your sheet and the desktop updates within seconds.
+- **Live:** reads your sheet from a GitHub repo (or a local file) and updates the desktop when it changes.
 - **Works over video wallpapers** (e.g. WallSpace). Solved tiles are holes the video plays through.
 - **Scattered, fixed layout:** tiles are randomly mixed (not grouped by topic) and never move, so the picture fills in like a scratch card.
 - **Fits your screen exactly:** it measures your display's resolution, Retina scale and menu bar.
@@ -38,11 +38,11 @@ cd dsa-wallpaper
 ./install.sh
 ```
 
-The first run creates `config.json`. Set `sheet_path` in it to your sheet, then run `./install.sh` again.
+The first run creates `config.json`. Set `sheet_path` to your sheet's GitHub link (or a local file path), then run `./install.sh` again.
 
 ## Your sheet
 
-Any markdown file with tables like this:
+Any markdown file with tables like this, either in a GitHub repo or on your Mac:
 
 | # | Problem | Difficulty | ✅ Solved | 📌 Revision |
 |:---:|:--------|:----------:|:---------:|:-----------:|
@@ -58,7 +58,7 @@ Any markdown file with tables like this:
 
 ## Usage
 
-It runs on its own: it starts at login and redraws whenever the sheet is saved.
+It runs on its own: it starts at login and redraws whenever the sheet changes. A GitHub sheet is checked every few minutes, so push your changes and the desktop catches up. A local sheet updates as soon as you save.
 
 | Command | What it does |
 |---|---|
@@ -76,7 +76,8 @@ Edit `config.json` and save. Changes apply automatically.
 
 | Key | Default | Description |
 |---|---|---|
-| `sheet_path` | | Path to your markdown sheet |
+| `sheet_path` | | GitHub link (`https://github.com/<user>/<repo>/blob/main/README.md`) or local path to your sheet |
+| `poll_minutes` | `3` | How often a GitHub sheet is checked |
 | `mode` | `overlay` | `overlay` floats above any wallpaper; `wallpaper` bakes the tiles into a still photo |
 | `photo_path` | `photo.jpg` | `wallpaper` mode only: the image to uncover |
 | `weights` | `1 · 2 · 4` | Tile area for easy · medium · hard |
@@ -91,16 +92,16 @@ Edit `config.json` and save. Changes apply automatically.
 ## How it works
 
 ```
-sheet.md ──save──▶ launchd agent ──▶ dsa_wallpaper.py ──▶ out/overlay.png
+GitHub / sheet.md ──▶ launchd agent ──▶ dsa_wallpaper.py ──▶ out/overlay.png
                                                               │
                          overlay/Overlay.swift ◀──reloads─────┘
                          (transparent, click-through window
                           between the wallpaper and desktop icons)
 ```
 
-- **`dsa_wallpaper.py`** parses the sheet, lays the tiles out (seeded shuffle, then a recursive split of the screen weighted by difficulty), and draws them with Pillow.
+- **`dsa_wallpaper.py`** fetches the sheet (GitHub API, keeping a cached copy for when you're offline), parses it, lays the tiles out (seeded shuffle, then a recursive split of the screen weighted by difficulty), and draws them with Pillow.
 - **`overlay/Overlay.swift`** is a small AppKit app that shows that image on every Space and display. It also writes `out/screen.json` with the real screen geometry, which the renderer uses.
-- **`install.sh`** creates a Python venv, compiles the overlay, and registers two launchd agents: one renders when the sheet changes, the other keeps the overlay running.
+- **`install.sh`** creates a Python venv, compiles the overlay, and registers two launchd agents: one renders when the sheet changes (polling GitHub, or watching the local file), the other keeps the overlay running.
 
 Logs: `out/log.txt` (renderer) and `out/overlay-log.txt` (overlay).
 

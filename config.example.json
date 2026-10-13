@@ -1,5 +1,5 @@
 {
-  "sheet_path": "~/path/to/your/README.md",
+  "sheet_path": "https://github.com/<user>/<repo>/blob/main/README.md",
   "photo_path": "photo.jpg",
   "seed": 42,
   "resolution": "auto",
@@ -17,5 +17,6 @@
   "labels": true,
   "legend": true,
   "mode": "overlay",
-  "overlay_level_offset": -1
+  "overlay_level_offset": -1,
+  "poll_minutes": 3
 }

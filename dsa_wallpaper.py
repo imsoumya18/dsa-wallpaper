@@ -27,6 +27,7 @@ Usage
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import random
 import re
@@ -61,6 +62,7 @@ DEFAULTS = {
     "legend_position": "notch",   # "notch" (top center) or "bottom-right"
     "mode": "overlay",            # "overlay" (floats above video wallpapers) or "wallpaper"
     "overlay_level_offset": -1,   # window level relative to desktop icons
+    "poll_minutes": 3,            # how often a GitHub sheet is checked
 }
 
 
@@ -84,14 +86,14 @@ class Problem:
         return "open"
 
 
-def parse_sheet(path: Path) -> list[Problem]:
+def parse_sheet(text: str) -> list[Problem]:
     """Collect every table row that starts with a `x.y.z` id.
 
     A problem can appear in several rows (new + revision weeks); flags are
     OR-ed across all of its rows.
     """
     problems: dict[str, Problem] = {}
-    for line in path.read_text(encoding="utf-8").splitlines():
+    for line in text.splitlines():
         if not ROW_RE.match(line):
             continue
         cells = [c.strip() for c in line.strip().strip("|").split("|")]
@@ -107,6 +109,58 @@ def parse_sheet(path: Path) -> list[Problem]:
         p.skipped |= "❌" in solved_cell
         p.revision |= "✅" in rev_cell or "📌" in rev_cell
     return list(problems.values())
+
+
+# ───────────────────────────── sheet source ─────────────────────────────
+
+SHEET_CACHE = OUT_DIR / "sheet.md"   # last copy fetched from GitHub (offline fallback)
+GITHUB_BLOB = re.compile(r"https://github\.com/([^/]+)/([^/]+)/(?:blob|raw)/([^/]+)/(.+)")
+
+
+def is_url(src: str) -> bool:
+    return src.startswith(("http://", "https://"))
+
+
+def curl(url: str, *headers: str) -> str | None:
+    cmd = ["curl", "-fsSL", "--max-time", "20"]
+    for h in headers:
+        cmd += ["-H", h]
+    try:
+        r = subprocess.run(cmd + [url], capture_output=True, timeout=30)
+        if r.returncode == 0 and r.stdout:
+            return r.stdout.decode("utf-8")
+        print(f"fetch failed ({url}): {r.stderr.decode().strip()}")
+    except Exception as e:
+        print(f"fetch failed ({url}): {e}")
+    return None
+
+
+def fetch_sheet(url: str) -> str:
+    """Latest sheet from GitHub. A github.com/<user>/<repo>/blob/<branch>/<path>
+    link goes through the GitHub API first (always fresh), then the raw file
+    (can lag a few minutes behind a push). Falls back to the cached copy."""
+    text = None
+    m = GITHUB_BLOB.match(url)
+    if m:
+        owner, repo, ref, path = m.groups()
+        text = curl(f"https://api.github.com/repos/{owner}/{repo}/contents/{path}?ref={ref}",
+                    "Accept: application/vnd.github.raw")
+        if text is None:
+            text = curl(f"https://raw.githubusercontent.com/{owner}/{repo}/{ref}/{path}?t={int(time.time())}")
+    else:
+        text = curl(url)
+    if text is not None:
+        OUT_DIR.mkdir(exist_ok=True)
+        SHEET_CACHE.write_text(text, encoding="utf-8")
+        return text
+    if SHEET_CACHE.exists():
+        print("offline — using the last fetched copy")
+        return SHEET_CACHE.read_text(encoding="utf-8")
+    sys.exit("Could not fetch the sheet and there is no cached copy yet.")
+
+
+def load_sheet(src: str) -> str:
+    return fetch_sheet(src) if is_url(src) else resolve(src).read_text(encoding="utf-8")
 
 
 # ───────────────────────────── layout ─────────────────────────────
@@ -356,7 +410,7 @@ def detect_screen() -> Screen:
 def render(cfg: dict, scr: Screen, transparent: bool = False) -> tuple[Image.Image, dict]:
     """transparent=True → tiles only on a clear background (overlay mode)."""
     w, h, scale = scr.w, scr.h, scr.scale
-    problems = parse_sheet(resolve(cfg["sheet_path"]))
+    problems = parse_sheet(cfg["_sheet_text"])
     if not problems:
         sys.exit(f"No problems found in {cfg['sheet_path']}")
     if cfg.get("simulate") == "unsolved":
@@ -531,6 +585,18 @@ def main():
         scr = detect_screen()
 
     overlay_mode = cfg["mode"] == "overlay" and not args.preview
+    cfg["_sheet_text"] = load_sheet(cfg["sheet_path"])
+
+    # polling a remote sheet runs this every few minutes: skip if nothing changed
+    stamp = OUT_DIR / "last-render.txt"
+    key = hashlib.sha256(json.dumps(
+        [cfg, [scr.w, scr.h, scr.scale, scr.top, scr.bottom, scr.left, scr.right],
+         Path(__file__).stat().st_mtime], sort_keys=True, default=str).encode()).hexdigest()
+    if (overlay_mode and not args.reshuffle and (OUT_DIR / "overlay.png").exists()
+            and stamp.exists() and stamp.read_text() == key):
+        print("no changes")
+        return
+
     img, stats = render(cfg, scr, transparent=overlay_mode)
     print(f"{scr.w}x{scr.h} @{scr.scale:g}x  insets t{scr.top} b{scr.bottom}  "
           f"done={stats['clear']} revision={stats['revision']} open={stats['open']}")
@@ -545,6 +611,7 @@ def main():
         tmp = OUT_DIR / "overlay.tmp.png"
         img.save(tmp)
         tmp.replace(OUT_DIR / "overlay.png")
+        stamp.write_text(key)
         return
 
     # macOS caches wallpapers by path, so write a fresh filename each time
