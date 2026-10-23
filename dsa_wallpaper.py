@@ -63,6 +63,7 @@ DEFAULTS = {
     "mode": "overlay",            # "overlay" (floats above video wallpapers) or "wallpaper"
     "overlay_level_offset": -1,   # window level relative to desktop icons
     "poll_minutes": 3,            # how often a GitHub sheet is checked
+    "progress_path": "",          # JSON source only: progress file next to the catalog
 }
 
 
@@ -109,6 +110,27 @@ def parse_sheet(text: str) -> list[Problem]:
         p.skipped |= "❌" in solved_cell
         p.revision |= "✅" in rev_cell or "📌" in rev_cell
     return list(problems.values())
+
+
+def parse_catalog(catalog_text: str, progress_text: str | None) -> list[Problem]:
+    """JSON source: a catalog `[[id, name, "easy"|"medium"|"hard"], ...]` plus a
+    progress map `{id: {"s": <solved date>, "flag": true}, ...}` — `s` means
+    solved, `flag` means marked for revision."""
+    prog = json.loads(progress_text) if progress_text else {}
+    if isinstance(prog.get("progress"), dict):
+        prog = prog["progress"]
+    out = []
+    for pid, name, diff in json.loads(catalog_text):
+        x = prog.get(pid) or {}
+        out.append(Problem(pid, name, diff if diff in ("easy", "medium", "hard") else "medium",
+                           solved=bool(x.get("s")), revision=bool(x.get("flag"))))
+    return out
+
+
+def load_problems(cfg: dict) -> list[Problem]:
+    if cfg["sheet_path"].endswith(".json"):
+        return parse_catalog(cfg["_sheet_text"], cfg.get("_progress_text"))
+    return parse_sheet(cfg["_sheet_text"])
 
 
 # ───────────────────────────── sheet source ─────────────────────────────
@@ -410,7 +432,7 @@ def detect_screen() -> Screen:
 def render(cfg: dict, scr: Screen, transparent: bool = False) -> tuple[Image.Image, dict]:
     """transparent=True → tiles only on a clear background (overlay mode)."""
     w, h, scale = scr.w, scr.h, scr.scale
-    problems = parse_sheet(cfg["_sheet_text"])
+    problems = load_problems(cfg)
     if not problems:
         sys.exit(f"No problems found in {cfg['sheet_path']}")
     if cfg.get("simulate") == "unsolved":
@@ -586,6 +608,9 @@ def main():
 
     overlay_mode = cfg["mode"] == "overlay" and not args.preview
     cfg["_sheet_text"] = load_sheet(cfg["sheet_path"])
+    if cfg.get("progress_path"):
+        pp = resolve(cfg["progress_path"])
+        cfg["_progress_text"] = pp.read_text(encoding="utf-8") if pp.exists() else None
 
     # polling a remote sheet runs this every few minutes: skip if nothing changed
     stamp = OUT_DIR / "last-render.txt"

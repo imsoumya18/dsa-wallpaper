@@ -6,8 +6,9 @@ __pycache__/
 # Generated at runtime (rendered images, compiled overlay, logs, screen info)
 out/
 
-# Personal settings and photo
+# Personal settings, photo and synced progress
 config.json
+prep-plan/
 photo.*
 
 # macOS / editors

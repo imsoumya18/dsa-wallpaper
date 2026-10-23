@@ -56,6 +56,20 @@ Any markdown file with tables like this, either in a GitHub repo or on your Mac:
 - **Solved** (second-to-last column): ✅ solved, or ❌ to skip the problem.
 - **Revision** (last column): ✅ or 📌.
 
+### Or a JSON catalog + progress file
+
+Point `sheet_path` at a `.json` catalog and `progress_path` at a progress file, for example one kept up to date by another tool:
+
+```json
+// catalog.json: [id, name, difficulty]
+[["3.2.5", "Print subarray with maximum subarray sum", "medium"], ...]
+
+// progress.json: s = solved date, flag = marked for revision
+{"3.2.5": {"s": "2026-10-22", "flag": true}, ...}
+```
+
+The desktop redraws whenever the progress file changes.
+
 ## Usage
 
 It runs on its own: it starts at login and redraws whenever the sheet changes. A GitHub sheet is checked every few minutes, so push your changes and the desktop catches up. A local sheet updates as soon as you save.
@@ -78,6 +92,7 @@ Edit `config.json` and save. Changes apply automatically.
 |---|---|---|
 | `sheet_path` | | GitHub link (`https://github.com/<user>/<repo>/blob/main/README.md`) or local path to your sheet |
 | `poll_minutes` | `3` | How often a GitHub sheet is checked |
+| `progress_path` | | JSON source only: the progress file |
 | `mode` | `overlay` | `overlay` floats above any wallpaper; `wallpaper` bakes the tiles into a still photo |
 | `photo_path` | `photo.jpg` | `wallpaper` mode only: the image to uncover |
 | `weights` | `1 · 2 · 4` | Tile area for easy · medium · hard |

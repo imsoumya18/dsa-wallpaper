@@ -32,13 +32,14 @@ cfg() { "$PY" - "$1" <<'PY'
 import sys, dsa_wallpaper as m
 c = m.load_config(); k = sys.argv[1]
 v = c[k]
-print(m.resolve(v) if k == "sheet_path" and not m.is_url(v) else v)
+print(m.resolve(v) if k in ("sheet_path", "progress_path") and v and not m.is_url(v) else v)
 PY
 }
 SHEET="$(cfg sheet_path)"
 MODE="$(cfg mode)"
 LEVEL="$(cfg overlay_level_offset)"
 POLL_MIN="$(cfg poll_minutes)"
+PROGRESS="$(cfg progress_path)"
 case "$SHEET" in
   http://*|https://*) REMOTE=1 ;;
   *) REMOTE=0; [ -f "$SHEET" ] || { echo "Sheet not found: $SHEET"; exit 1; } ;;
@@ -103,6 +104,7 @@ cat > "$PLIST" <<EOF
   <key>WatchPaths</key>
   <array>
 $( [ "$REMOTE" = 0 ] && echo "    <string>$(xml "$SHEET")</string>" )
+$( [ -n "$PROGRESS" ] && echo "    <string>$(xml "$PROGRESS")</string>" )
     <string>$(xml "$DIR/config.json")</string>
     <string>$(xml "$DIR/out/screen.json")</string>
   </array>
