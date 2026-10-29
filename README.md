@@ -70,6 +70,19 @@ Point `sheet_path` at a `.json` catalog and `progress_path` at a progress file, 
 
 The desktop redraws whenever the progress file changes.
 
+To have a tracker page in the Claude desktop app write these files directly as you tick things off, with no model involved, register `mcp_server.py` as a local MCP server (Settings → Developer → Edit Config):
+
+```json
+"mcpServers": {
+  "dsa-wallpaper": {
+    "command": "/path/to/dsa-wallpaper/.venv/bin/python",
+    "args": ["/path/to/dsa-wallpaper/mcp_server.py"]
+  }
+}
+```
+
+It offers one tool, `write_progress({progress, catalog?})`, and can only write `prep-plan/progress.json` and `prep-plan/catalog.json`.
+
 ## Usage
 
 It runs on its own: it starts at login and redraws whenever the sheet changes. A GitHub sheet is checked every few minutes, so push your changes and the desktop catches up. A local sheet updates as soon as you save.
@@ -116,6 +129,7 @@ GitHub / sheet.md ──▶ launchd agent ──▶ dsa_wallpaper.py ──▶ o
 
 - **`dsa_wallpaper.py`** fetches the sheet (GitHub API, keeping a cached copy for when you're offline), parses it, lays the tiles out (seeded shuffle, then a recursive split of the screen weighted by difficulty), and draws them with Pillow.
 - **`overlay/Overlay.swift`** is a small AppKit app that shows that image on every Space and display. It also writes `out/screen.json` with the real screen geometry, which the renderer uses.
+- **`mcp_server.py`** (optional) lets a tracker page in the Claude desktop app save progress straight into `prep-plan/`.
 - **`install.sh`** creates a Python venv, compiles the overlay, and registers two launchd agents: one renders when the sheet changes (polling GitHub, or watching the local file), the other keeps the overlay running.
 
 Logs: `out/log.txt` (renderer) and `out/overlay-log.txt` (overlay).
